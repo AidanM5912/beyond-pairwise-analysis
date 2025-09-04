@@ -1,0 +1,63 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: JOB_NAME_PLACEHOLDER
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      priorityClassName: opportunistic
+      containers:
+      - name: rhosts
+        image: aidanmorson/rhosts:v1
+        imagePullPolicy: Always
+        resources:
+
+          # GPU Run
+          requests:
+            cpu: "50"
+            memory: "350Gi"
+            ephemeral-storage: "250Gi"
+          limits:
+            cpu: "50"
+            memory: "350Gi"
+            ephemeral-storage: "250Gi"
+
+        command: ["stdbuf", "-i0", "-o0", "-e0", "/usr/bin/time", "-v", "python", "/app/High_order_TS_with_scaffold/simplicial_multivariate.py"]
+        args:
+          - s3://braingeneersdev/amorson/hosts/Pr10_chunks/JOB_DATA_PLACEHOLDER
+          - -p
+          - "16"
+          - -n
+          - -s
+          - weighted_network
+          - -j
+          - /app/High_order_TS_with_scaffold/javaplex
+          - /app/homo_scaff
+          - --output-s3
+          - s3://braingeneersdev/amorson/hosts/outputs/Pr10_chunks/JOB_NAME_PLACEHOLDER/
+          
+        env:
+          - name: "PYTHONUNBUFFERED"
+            value: "true"
+          # Ceph (internal)
+          - name: "ENDPOINT_URL"
+            value: "https://s3.braingeneers.gi.ucsc.edu"  # ceph internal
+          - name: "S3_ENDPOINT"
+            value: "s3.braingeneers.gi.ucsc.edu" # ceph internal
+
+        volumeMounts:
+
+          # Ceph credentials
+          - name: "prp-s3-credentials"
+            mountPath: "/root/.aws/credentials"
+            subPath: "credentials"
+
+      restartPolicy: Never
+      volumes:
+        # Secrets file for nautilus s3 credentials .aws/credentials and .s3cfg
+        - name: prp-s3-credentials
+          secret:
+            secretName: prp-s3-credentials
+        - name: ephemeral
+          emptyDir: {}

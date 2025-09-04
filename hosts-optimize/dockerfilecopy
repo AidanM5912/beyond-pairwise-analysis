@@ -1,0 +1,62 @@
+# 1) Python base
+FROM python:3.9-slim
+
+# 2) Non-interactive apt + custom endpoint
+ENV DEBIAN_FRONTEND=noninteractive
+ENV ENDPOINT_URL="https://s3.braingeneers.gi.ucsc.edu"
+
+# 3) Install Linux build tools, Java, git, awscli
+RUN apt-get update && \
+    apt-get install -y \
+      build-essential \
+      wget \
+      curl \
+      unzip \
+      openjdk-17-jdk-headless \
+      git \
+      time \
+    && pip install --upgrade pip awscli \
+    && rm -rf /var/lib/apt/lists/*
+
+# 4) Copy your repo into the image
+WORKDIR /app
+COPY . /app
+
+# 5) Install all Python deps from requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 6) Install cechmate WITHOUT pulling in phat
+RUN pip install --no-cache-dir --use-deprecated=legacy-resolver --no-deps cechmate>=0.0.10
+
+# 7) Manually fetch & build phat
+RUN wget https://files.pythonhosted.org/packages/43/82/c14de81dc2953a71a060f72f2bc34c41996307956b162751f2a47e2c78f7/phat-1.5.0a.tar.gz \
+&& tar -xzf phat-1.5.0a.tar.gz \
+&& cd phat-* \
+&& pip install --no-cache-dir pybind11 setuptools \
+&& python setup.py install \
+&& cd /app \
+&& rm -rf phat-* phat-1.5.0a.tar.gz
+
+
+
+# 8) Install Jython so Javaplex‐based scaffold will work
+RUN wget https://repo1.maven.org/maven2/org/python/jython-installer/2.7.3/jython-installer-2.7.3.jar \
+ && mkdir -p /opt/jython \
+ && java -jar jython-installer-2.7.3.jar -s -d /opt/jython \
+ && rm jython-installer-2.7.3.jar
+
+# 9) Make Jython available on PATH
+ENV PATH="/opt/jython/bin:${PATH}"
+
+# 9.5) Add CLASSPATH so Jython can see Javaplex
+ENV CLASSPATH="/app/High_order_TS_with_scaffold/javaplex/javaplex.jar"
+
+# (Optional) Confirm working
+RUN /opt/jython/bin/jython -c "import edu.stanford.math.plex4; print('Javaplex import success')"
+
+# 10) Default to Bash; override with your script & flags at runtime
+ENTRYPOINT ["/bin/bash","-lc"]
+CMD ["python High_order_TS_with_scaffold/simplicial_multivariate.py --help"]
+
+RUN echo "Contents of /app:" && find /app
+RUN echo "Looking for javaplex.jar:" && find /app -name 'javaplex.jar' || echo "Not found"
